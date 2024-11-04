@@ -76,7 +76,7 @@ double Simulation::calculate_energy() const {
 // Реализация метода update_positions класса Simulation
 void Simulation::update_positions() {
     double W = 1, W0 = 0;
-    double step_multiplier = 0.09;  // начальный множитель шага
+    double step_multiplier = 1e-3;  // начальный множитель шаг
     const double step_decrement = 0.5;
     bool positions_updated;
 
@@ -117,6 +117,9 @@ void Simulation::update_positions() {
 
         if (!positions_updated) {
             step_multiplier *= step_decrement;
+
+
+
         }
 
         W = calculate_energy();
