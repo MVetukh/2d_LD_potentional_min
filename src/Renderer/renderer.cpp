@@ -12,6 +12,7 @@ const char* vertexShaderSource = R"glsl(
 
     void main() {
         gl_Position = projection * vec4(aPos, 0.0, 1.0);
+        gl_PointSize = 15.0;  // Set the size of each point
     }
 )glsl";
 
@@ -19,8 +20,15 @@ const char* vertexShaderSource = R"glsl(
 const char* fragmentShaderSource = R"glsl(
     #version 330 core
     out vec4 FragColor;
+
     void main() {
-        FragColor = vec4(0.0, 0.5, 1.0, 1.0); // Color for points
+        // Calculate the distance from the center of the point
+        float dist = length(gl_PointCoord - vec2(0.5));
+        if (dist < 0.5) {
+            FragColor = vec4(0.0, 0.5, 1.0, 1.0); // Blue color for inside the circle
+        } else {
+            discard;  // Discard fragments outside the circle
+        }
     }
 )glsl";
 
@@ -122,25 +130,47 @@ void Renderer::init_points(const std::vector<std::array<float, 2>>& points) {
 }
 
 void Renderer::render(const std::vector<std::array<float, 2>>& points) {
+    init_shaders();
     init_points(points);
 
-    glPointSize(10.0f);  // Set the point size for visibility
+    // Enable alpha blending for smooth circles
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Set up an orthographic projection matrix for 2D view
-    glm::mat4 projection = glm::ortho(-1.2f, 1.2f, -1.2f, 1.2f);
+    // Define the view matrix (camera at origin looking at -Z direction)
+    glm::mat4 view = glm::mat4(1.0f);  // Identity matrix; no transformation
 
-    glUseProgram(shaderProgram);
-    GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
-    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    // Define an orthographic projection matrix
+    glm::mat4 projection = glm::ortho(-1.5f, 1.5f, -1.5f, 1.5f, -1.0f, 1.0f);
 
+    glPointSize(15.0f);
     while (!glfwWindowShouldClose(window)) {
-        glClear(GL_COLOR_BUFFER_BIT);
+        process_input();
 
+        // Clear the screen
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Use shader program
+        glUseProgram(shaderProgram);
+
+        // Pass the view and projection matrices to the shader
+        GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+        // Bind VAO and draw points as circles
         glBindVertexArray(VAO);
         glDrawArrays(GL_POINTS, 0, points.size());
 
+        // Swap buffers and poll for events
         glfwSwapBuffers(window);
         glfwPollEvents();
+    }
+}
+
+void Renderer::process_input() {
+    // Check if the ESC key was pressed, or if the window should close
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, true);
     }
 }
 
