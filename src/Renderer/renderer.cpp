@@ -143,7 +143,7 @@ void Renderer::render(const std::vector<std::array<float, 2>>& points) {
     // Define an orthographic projection matrix
     glm::mat4 projection = glm::ortho(-1.5f, 1.5f, -1.5f, 1.5f, -1.0f, 1.0f);
 
-    glPointSize(15.0f);
+    glPointSize(25.0f);
     while (!glfwWindowShouldClose(window)) {
         process_input();
 
