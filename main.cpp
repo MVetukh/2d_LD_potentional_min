@@ -1,7 +1,9 @@
 #include <iostream>
 #include <chrono>
 #include "src/Calculate/calculate.h"
-#include "src/Renderer/Renderer.h"  // Include the Renderer class
+#include "src/Renderer/renderer.h"  // Include the Renderer class
+#include "src/Calculate/hyperparameters.h"
+
 
 int main() {
     int n;
@@ -10,8 +12,13 @@ int main() {
 
     auto start = std::chrono::high_resolution_clock::now();
 
+//    // Инициализируем параметры
+//    PhysicalParams phys_params = default_physical_params;  // или можно изменить на нужные
+//    OptimizationParams opt_params = default_optimization_params;  // можно настроить параметры оптимизации
+
+
     // Initialize simulation
-    Simulation sim(n);
+    Simulation sim(n,default_physical_params, default_optimization_params);
     sim.update_positions();  // Calculate final positions of charges
 
     auto end = std::chrono::high_resolution_clock::now();

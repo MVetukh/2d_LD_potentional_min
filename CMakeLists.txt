@@ -8,7 +8,9 @@ add_executable(2d_LD_potentional_min main.cpp
         src/Calculate/calculate.h
         src/Calculate/calculate.cpp
         src/Renderer/renderer.h
-        src/Renderer/renderer.cpp)
+        src/Renderer/renderer.cpp
+        src/Calculate/hyperparameters.cpp
+        src/Calculate/hyperparameters.h)
 
 add_subdirectory(external/glfw)
 add_subdirectory(external/glad)
