@@ -10,6 +10,8 @@ struct PhysicalParams {
     double e;  // заряд
     double R;  // радиус сферы
     double L;  // длина области
+    double epsilon;
+    double delta;
 };
 
 struct OptimizationParams {
