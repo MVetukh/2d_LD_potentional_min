@@ -19,7 +19,11 @@ std::array<double, 2> Charge::calculate_force(const Charge& other, const Physica
     double r = std::sqrt(delta[0] * delta[0] + delta[1] * delta[1]);
     if (r == 0.0) return {0.0, 0.0};
 
-    double F = (params.k * params.e * params.e) / (r * r);
+    double sigma_over_r = params.delta / r;
+    double sigma_over_r6 = std::pow(sigma_over_r, 6);
+    double sigma_over_r12 = sigma_over_r6 * sigma_over_r6;
+    double F = 24 * params.epsilon * (2 * sigma_over_r12 - sigma_over_r6) / (r * r);
+
     return {F * delta[0] / r, F * delta[1] / r};
 }
 
@@ -55,7 +59,13 @@ double Simulation::calculate_energy() const {
             }
 
             double r = std::sqrt(delta[0] * delta[0] + delta[1] * delta[1]);
-            if (r != 0.0) W += phys_params.k * phys_params.e * phys_params.e / r;
+
+            if (r != 0.0) {
+                double sigma_over_r = phys_params.delta / r;
+                double sigma_over_r6 = std::pow(sigma_over_r, 6);
+                double sigma_over_r12 = sigma_over_r6 * sigma_over_r6;
+                W += 4 * phys_params.epsilon * (sigma_over_r12 - sigma_over_r6);
+            }
         }
     }
     return W;

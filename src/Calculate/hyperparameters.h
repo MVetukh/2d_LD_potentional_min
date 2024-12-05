@@ -12,6 +12,7 @@ struct PhysicalParams {
     double L;  // длина области
     double epsilon;
     double delta;
+
 };
 
 struct OptimizationParams {
