@@ -12,10 +12,10 @@ int main() {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-//    // Инициализируем параметры
+   // Инициализируем параметры
 //    PhysicalParams phys_params = default_physical_params;  // или можно изменить на нужные
 //    OptimizationParams opt_params = default_optimization_params;  // можно настроить параметры оптимизации
-
+//
 
     // Initialize simulation
     Simulation sim(n,default_physical_params, default_optimization_params);
