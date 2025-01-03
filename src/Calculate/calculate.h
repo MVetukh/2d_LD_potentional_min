@@ -14,8 +14,10 @@ public:
 
     std::array<double, 2> calculate_force(const Charge& other, const PhysicalParams& params) const;
 
-private:
     double random_double(double min, double max) const;
+
+private:
+
 };
 
 // Класс для симуляции системы зарядов

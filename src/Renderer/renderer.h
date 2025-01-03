@@ -28,6 +28,7 @@ public:
 
     // Очистка ресурсов
     void cleanup();
+
 private:
     GLFWwindow* window;
     GLuint VBO, VAO, shaderProgram;

@@ -71,9 +71,9 @@ double Simulation::calculate_energy() const {
     return W;
 }
 
-double random_double_fluct(double a, double b) {
-    return a + (b - a) * static_cast<double>(rand())/RAND_MAX ;
-}
+//double random_double_fluct(double a, double b) {
+//    return a + (b - a) * static_cast<double>(rand())/RAND_MAX ;
+//}
 
 
 void Simulation::update_positions() {
@@ -107,7 +107,7 @@ void Simulation::update_positions() {
                 charges[i].position[k] -= opt_params.learning_rate * m_hat / (std::sqrt(v_hat) + opt_params.epsilon);
 
                 // Добавляем небольшое случайное смещение (колебания)
-               charges[i].position[k] += random_double_fluct(-0.00001, 0.0001);  // Значение может быть настроено
+               charges[i].position[k] += charges[i].random_double(-0.0015, 0.0015);  // Значение может быть настроено
 
                 // Периодические граничные условия
                 if (charges[i].position[k] > phys_params.L / 2) charges[i].position[k] -= phys_params.L;

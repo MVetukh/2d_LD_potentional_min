@@ -3,16 +3,20 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "../Calculate/calculate.h"
+#include <cmath>
+#include <random>
 
 // Vertex shader source
 const char* vertexShaderSource = R"glsl(
     #version 330 core
     layout (location = 0) in vec2 aPos;
+    layout (location = 1) in float aSize;  // Новый атрибут для размера точки
     uniform mat4 projection;
 
     void main() {
         gl_Position = projection * vec4(aPos, 0.0, 1.0);
-        gl_PointSize = 15.0;  // Set the size of each point
+        gl_PointSize = aSize;  // Используем размер точки
     }
 )glsl";
 
@@ -22,12 +26,12 @@ const char* fragmentShaderSource = R"glsl(
     out vec4 FragColor;
 
     void main() {
-        // Calculate the distance from the center of the point
+        // Расчёт расстояния от центра точки
         float dist = length(gl_PointCoord - vec2(0.5));
         if (dist < 0.5) {
-            FragColor = vec4(0.0, 0.5, 1.0, 1.0); // Blue color for inside the circle
+            FragColor = vec4(0.0, 0.5, 1.0, 1.0); // Синий цвет внутри круга
         } else {
-            discard;  // Discard fragments outside the circle
+            discard;  // Отбрасываем пиксели вне круга
         }
     }
 )glsl";
@@ -39,7 +43,6 @@ Renderer::~Renderer() {
 }
 
 bool Renderer::init(int width, int height, const char* title) {
-    // Initialize GLFW and create a window
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return false;
@@ -67,7 +70,6 @@ bool Renderer::init(int width, int height, const char* title) {
 }
 
 void Renderer::init_shaders() {
-    // Compile and link shaders
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
     glCompileShader(vertexShader);
@@ -109,9 +111,19 @@ void Renderer::init_shaders() {
 
 void Renderer::init_points(const std::vector<std::array<float, 2>>& points) {
     std::vector<float> vertices;
+    std::vector<float> sizes;
+
+    auto random_double = [](double min, double max) {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(min, max);
+        return dis(gen);
+    };
+
     for (const auto& point : points) {
         vertices.push_back(point[0]);
         vertices.push_back(point[1]);
+        sizes.push_back(static_cast<float>(random_double(20.0, 40.0)));  // Более широкий диапазон размеров
     }
 
     glGenVertexArrays(1, &VAO);
@@ -125,6 +137,14 @@ void Renderer::init_points(const std::vector<std::array<float, 2>>& points) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    GLuint sizeBuffer;
+    glGenBuffers(1, &sizeBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, sizeBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizes.size() * sizeof(float), sizes.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
@@ -133,42 +153,33 @@ void Renderer::render(const std::vector<std::array<float, 2>>& points) {
     init_shaders();
     init_points(points);
 
-    // Enable alpha blending for smooth circles
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Define the view matrix (camera at origin looking at -Z direction)
-    glm::mat4 view = glm::mat4(1.0f);  // Identity matrix; no transformation
+    glEnable(GL_PROGRAM_POINT_SIZE);  // Включение поддержки изменения размера точки
 
-    // Define an orthographic projection matrix
+    glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 projection = glm::ortho(-1.5f, 1.5f, -1.5f, 1.5f, -1.0f, 1.0f);
 
-    glPointSize(25.0f);
     while (!glfwWindowShouldClose(window)) {
         process_input();
 
-        // Clear the screen
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Use shader program
         glUseProgram(shaderProgram);
 
-        // Pass the view and projection matrices to the shader
         GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        // Bind VAO and draw points as circles
         glBindVertexArray(VAO);
         glDrawArrays(GL_POINTS, 0, points.size());
 
-        // Swap buffers and poll for events
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 }
 
 void Renderer::process_input() {
-    // Check if the ESC key was pressed, or if the window should close
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
