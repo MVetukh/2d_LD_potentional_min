@@ -14,36 +14,29 @@
 #include "glm/detail/type_mat4x4.hpp"
 #include <GLFW/glfw3.h>
 
+#include <vector>
+#include <array>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 class Renderer {
 public:
     Renderer();
     ~Renderer();
 
-    // Инициализация OpenGL и создание окна
     bool init(int width, int height, const char* title);
+    void render(const std::vector<std::array<float, 2>>& points, float L, const std::vector<float>& radii);
 
-    // Главный цикл отрисовки
-    void render(const std::vector<std::array<float, 2>>& points);
-
-    // Очистка ресурсов
     void cleanup();
 
 private:
     GLFWwindow* window;
-    GLuint VBO, VAO, shaderProgram;
-    glm::mat4 projection;
+    GLuint VAO, VBO, sizeVBO;
+    GLuint shaderProgram;
 
-    // Инициализация шейдеров
-    void init_shaders();
-
-    // Инициализация точек для отрисовки
-    void init_points(const std::vector<std::array<float, 2>>& points);
-
-    // Обработка ввода
-    void process_input();
-
-
+    void processInput();
+    bool compileShaders();
+    void initBuffers(const std::vector<float>& vertices, const std::vector<float>& sizes);
 };
 
 

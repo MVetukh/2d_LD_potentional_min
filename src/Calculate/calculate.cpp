@@ -1,132 +1,174 @@
 #include "calculate.h"
 #include <cmath>
 #include <iostream>
-#include <random>
+#include <vector>
+#include <algorithm>
+#include <limits>
 
-// Реализация конструктора класса Charge
+// Charge constructor: initialize random position in [-L/2, L/2]
+// В конструкторе Charge:
 Charge::Charge(const PhysicalParams& params) {
-    position = {random_double(-params.L / 2, params.L / 2), random_double(-params.L / 2, params.L / 2)};
+    static std::mt19937_64 gen{std::random_device{}()};
+    std::uniform_real_distribution<double> dist_pos(-params.L/2.0, params.L/2.0);
+    position[0] = dist_pos(gen);
+    position[1] = dist_pos(gen);
+    radius  = randomRadius(params.R_min, params.R_max);
 }
 
-std::array<double, 2> Charge::calculate_force(const Charge& other, const PhysicalParams& params) const {
-    std::array<double, 2> delta = {other.position[0] - position[0], other.position[1] - position[1]};
-
-    for (int i = 0; i < 2; ++i) {
-        if (delta[i] > params.L / 2) delta[i] -= params.L;
-        else if (delta[i] < -params.L / 2) delta[i] += params.L;
-    }
-
-    double r = std::sqrt(delta[0] * delta[0] + delta[1] * delta[1]);
-    if (r == 0.0) return {0.0, 0.0};
-
-    double sigma_over_r = params.delta / r;
-    double sigma_over_r6 = std::pow(sigma_over_r, 6);
-    double sigma_over_r12 = sigma_over_r6 * sigma_over_r6;
-    double F = 24 * params.epsilon * (2 * sigma_over_r12 - sigma_over_r6) / (r * r);
-
-    return {F * delta[0] / r, F * delta[1] / r};
-}
-
-double Charge::random_double(double min, double max) const {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_real_distribution<> dis(min, max);
-    return dis(gen);
-}
-
-Simulation::Simulation(int n, const PhysicalParams& phys_params, const OptimizationParams& opt_params)
-        : phys_params(phys_params), opt_params(opt_params) {
-    // Инициализируем каждый заряд с уникальными значениями
+// Simulation constructor: store params and create charges
+Simulation::Simulation(int n,
+                       const PhysicalParams& phys_params,
+                       OptimizationParams& opt_params)
+        : phys_params(phys_params), opt_params(opt_params)
+{
     charges.reserve(n);
     for (int i = 0; i < n; ++i) {
-        charges.push_back(Charge(phys_params));  // Инициализация каждого заряда
+        charges.emplace_back(phys_params);
     }
-    m.resize(n, {0.0, 0.0});
-    v.resize(n, {0.0, 0.0});
 }
 
-
-double Simulation::calculate_energy() const {
-    double W = 0.0;
-    for (size_t i = 0; i < charges.size() - 1; ++i) {
-        for (size_t j = i + 1; j < charges.size(); ++j) {
-            std::array<double, 2> delta = {charges[j].position[0] - charges[i].position[0],
-                                           charges[j].position[1] - charges[i].position[1]};
-
-            for (int k = 0; k < 2; ++k) {
-                if (delta[k] > phys_params.L / 2) delta[k] -= phys_params.L;
-                else if (delta[k] < -phys_params.L / 2) delta[k] += phys_params.L;
-            }
-
-            double r = std::sqrt(delta[0] * delta[0] + delta[1] * delta[1]);
-
-            if (r != 0.0) {
-                double sigma_over_r = phys_params.delta / r;
-                double sigma_over_r6 = std::pow(sigma_over_r, 6);
-                double sigma_over_r12 = sigma_over_r6 * sigma_over_r6;
-                W += 4 * phys_params.epsilon * (sigma_over_r12 - sigma_over_r6);
-            }
-        }
-    }
-    return W;
+// Applies periodic boundary condition for coordinate in [-1,1]
+inline double applyPBCCoord(double x) {
+    double res = std::fmod(x + 1.0, 2.0);
+    if (res < 0) res += 2.0;
+    return res - 1.0;
 }
 
-//double random_double_fluct(double a, double b) {
-//    return a + (b - a) * static_cast<double>(rand())/RAND_MAX ;
-//}
+void applyPBC(std::vector<Charge>& charges) {
+    for (auto& c : charges) {
+        c.position[0] = applyPBCCoord(c.position[0]);
+        c.position[1] = applyPBCCoord(c.position[1]);
+    }
+}
+static double localEnergy(int i,
+                          const std::vector<Charge>& charges,
+                          int num_neighbors,
+                          const PhysicalParams& phys_params)
+{
+    int N = charges.size();
+    std::vector<std::pair<double,int>> dist_idx;
+    dist_idx.reserve(N-1);
 
+    for (int j = 0; j < N; ++j) {
+        if (j == i) continue;
+        double dx = charges[j].position[0] - charges[i].position[0];
+        double dy = charges[j].position[1] - charges[i].position[1];
+        dx -= std::round(dx/phys_params.L)*phys_params.L;
+        dy -= std::round(dy/phys_params.L)*phys_params.L;
+        double r2 = dx*dx + dy*dy;
+        dist_idx.emplace_back(r2, j);
+    }
 
-void Simulation::update_positions() {
-    double W = calculate_energy(), W0 = 0.0;
-    int iteration = 0;
+    int k = std::min(num_neighbors, N-1);
+    std::nth_element(dist_idx.begin(), dist_idx.begin()+k, dist_idx.end());
 
-    while (std::abs(W - W0) > opt_params.convergence_tol && iteration < opt_params.max_iterations) {
-        W0 += W;
+    double energy = 0;
+    for (int t = 0; t < k; ++t) {
+        int j = dist_idx[t].second;
+        double r = std::sqrt(std::max(dist_idx[t].first, 1e-12));
+        // sigma = sum of radii
+        double sigma = charges[i].radius + charges[j].radius;
+        double sr = sigma/r;
+        double sr6 = std::pow(sr,6);
+        energy += 4*phys_params.epsilon*(sr6*sr6 - sr6);
+    }
+    return energy;
+}
 
-        for (size_t i = 0; i < charges.size(); ++i) {
-            std::array<double, 2> resultant_force = {0.0, 0.0};
+// Coordinate descent optimization
+void coordinateDescent(std::vector<Charge>& charges,
+                       int num_neighbors,
+                       double lr,
+                       double tol,
+                       int max_iters,
+                       const PhysicalParams& phys_params) {
+    int N = static_cast<int>(charges.size());
+    double step_scale = 1.0;
+    double prev_energy = std::numeric_limits<double>::infinity();
 
-            // Вычисляем силы между зарядами
-            for (size_t j = 0; j < charges.size(); ++j) {
-                if (i != j) {
-                    auto force = charges[i].calculate_force(charges[j], phys_params);
-                    resultant_force[0] += force[0];
-                    resultant_force[1] += force[1];
+    for (int iter = 0; iter < max_iters; ++iter) {
+        double total_energy = 0.0;
+        bool moved = false;
+
+        for (int i = 0; i < N; ++i) {
+            for (int dim = 0; dim < 2; ++dim) {
+                double& coord = charges[i].position[dim];
+                double old_val = coord;
+                double e_curr = localEnergy(i, charges, num_neighbors, phys_params);
+
+                // positive step
+                coord = old_val + step_scale * lr;
+                applyPBC(charges);
+                double e_plus = localEnergy(i, charges, num_neighbors, phys_params);
+
+                // negative step
+                coord = old_val - step_scale * lr;
+                applyPBC(charges);
+                double e_minus = localEnergy(i, charges, num_neighbors, phys_params);
+
+                // reset back
+                coord = old_val;
+                applyPBC(charges);
+
+                if (e_plus < e_curr && e_plus < e_minus) {
+                    coord = old_val + step_scale * lr;
+                    total_energy += e_plus;
+                    moved = true;
+                } else if (e_minus < e_curr) {
+                    coord = old_val - step_scale * lr;
+                    total_energy += e_minus;
+                    moved = true;
+                } else {
+                    total_energy += e_curr;
                 }
             }
-
-            // Обновляем позиции зарядов с добавлением случайных колебаний
-            for (int k = 0; k < 2; ++k) {
-                m[i][k] = opt_params.beta1 * m[i][k] + (1.0 - opt_params.beta1) * resultant_force[k];
-                v[i][k] = opt_params.beta2 * v[i][k] + (1.0 - opt_params.beta2) * (resultant_force[k] * resultant_force[k]);
-
-                double m_hat = m[i][k] / (1.0 - std::pow(opt_params.beta1, iteration + 1));
-                double v_hat = v[i][k] / (1.0 - std::pow(opt_params.beta2, iteration + 1));
-
-                // Обновляем позицию с учетом случайных колебаний
-                charges[i].position[k] -= opt_params.learning_rate * m_hat / (std::sqrt(v_hat) + opt_params.epsilon);
-
-                // Добавляем небольшое случайное смещение (колебания)
-               charges[i].position[k] += charges[i].random_double(-0.0015, 0.0015);  // Значение может быть настроено
-
-                // Периодические граничные условия
-                if (charges[i].position[k] > phys_params.L / 2) charges[i].position[k] -= phys_params.L;
-                else if (charges[i].position[k] < -phys_params.L / 2) charges[i].position[k] += phys_params.L;
+        }
+        if (std::abs(prev_energy - total_energy) < tol) {
+            std::cout << "Converged at iteration " << iter
+                      << ", energy = " << total_energy << std::endl;
+            break;
+        }
+        prev_energy = total_energy;
+        if (!moved) {
+            step_scale *= 0.5;
+            if (step_scale < 1e-4) {
+                std::cout << "Step scale too small, stopping at iter " << iter << std::endl;
+                break;
             }
         }
-
-        W = calculate_energy();
-        ++iteration;
-
-        if (iteration % 10 == 0)
-            std::cout << "Iteration: " << iteration << ", Energy: " << W << "\n";
     }
 }
 
+// Replace update_positions with coordinate descent in Simulation
+void Simulation::update_positions() {
+    std::cout<<"Start CD descent\n";
+    applyPBC(charges);
+    coordinateDescent(charges,
+                      opt_params.num_neighbors,
+                      opt_params.learning_rate,
+                      opt_params.convergence_tol,
+                      opt_params.max_iterations,
+                      phys_params);
+    std::cout<<"Final energy="<<calculate_energy()<<std::endl;
+}
 
-void Simulation::print_positions() const {
-    std::cout << "Positions:\n";
-    for (const auto& charge : charges)
-        std::cout << "(" << charge.position[0] << ", " << charge.position[1] << ") ";
-    std::cout << "\n";
+// Total energy computation (if needed elsewhere)
+double Simulation::calculate_energy() const {
+    double energy = 0.0;
+    int N = static_cast<int>(charges.size());
+    for (int i = 0; i < N; ++i) {
+        for (int j = i + 1; j < N; ++j) {
+            double dx = charges[j].position[0] - charges[i].position[0];
+            double dy = charges[j].position[1] - charges[i].position[1];
+            dx -= std::floor(dx / phys_params.L + 0.5) * phys_params.L;
+            dy -= std::floor(dy / phys_params.L + 0.5) * phys_params.L;
+            double r = std::hypot(dx, dy);
+            r = std::max(r, 1e-12);
+            double sigma = phys_params.R * 2.0;
+            double sr = sigma / r;
+            double sr6 = std::pow(sr, 6);
+            energy += 4.0 * phys_params.epsilon * (sr6 * sr6 - sr6);
+        }
+    }
+    return energy;
 }

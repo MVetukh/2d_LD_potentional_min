@@ -3,42 +3,54 @@
 
 #include <array>
 #include <vector>
+#include <random>
 #include "hyperparameters.h"
 
-// Класс для представления заряда
-class Charge {
-public:
+#include <vector>
+#include <array>
+#include "hyperparameters.h"  // Defines PhysicalParams and OptimizationParams
+
+// Represents a point/charge with a 2D position
+struct Charge {
     std::array<double, 2> position;
-
-    explicit Charge(const PhysicalParams& params);
-
-    std::array<double, 2> calculate_force(const Charge& other, const PhysicalParams& params) const;
-
-    double random_double(double min, double max) const;
-
-private:
-
+    double radius;
+    // Constructor initializes position randomly within [-L/2, L/2]
+    Charge(const PhysicalParams& params);
 };
 
-// Класс для симуляции системы зарядов
+// Simulation class: holds charges and runs minimization
 class Simulation {
 public:
-    Simulation(int n, const PhysicalParams& phys_params, const OptimizationParams& opt_params);
+    // Constructor: creates n charges with given physical and optimization parameters
+    Simulation(int n, const PhysicalParams& phys_params, OptimizationParams& opt_params);
 
-    double calculate_energy() const;
-
-    std::vector<Charge> charges;
-
+    // Runs coordinate descent minimization
     void update_positions();
 
-    void print_positions() const;
+    // Computes total Lennard-Jones energy of the system
+    double calculate_energy() const;
+
+    // List of charges in the system
+    std::vector<Charge> charges;
 
 private:
-    const PhysicalParams& phys_params;
-    const OptimizationParams& opt_params;
-
-    std::vector<std::array<double, 2>> m;
-    std::vector<std::array<double, 2>> v;
+    PhysicalParams phys_params;
+    OptimizationParams opt_params;
 };
+
+// Applies periodic boundary conditions to all charges (wraps positions into box [-1,1])
+void applyPBC(std::vector<Charge>& charges);
+
+// Coordinate descent minimization on charges:
+// - num_neighbors: how many nearest neighbors to consider
+// - lr: learning rate
+// - tol: convergence tolerance on energy change
+// - max_iters: maximum iterations
+void coordinateDescent(std::vector<Charge>& charges,
+                       int num_neighbors,
+                       double lr,
+                       double tol,
+                       int max_iters,
+                       const PhysicalParams& phys_params);
 
 #endif //INC_2D_LD_POTENTIONAL_MIN_CALCULATE_H
